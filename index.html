@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pro Mobile Game</title>
+
+<style>
+body { margin:0; overflow:hidden; font-family:sans-serif; }
+
+canvas { display:block; }
+
+#ui {
+  position:fixed;
+  top:10px;
+  left:10px;
+  color:white;
+  font-size:18px;
+}
+
+.controls {
+  position:fixed;
+  bottom:20px;
+  width:100%;
+  display:flex;
+  justify-content:center;
+  gap:15px;
+}
+
+button {
+  width:65px;
+  height:65px;
+  border-radius:50%;
+  border:none;
+  font-size:20px;
+  background:rgba(0,0,0,0.5);
+  color:white;
+}
+</style>
+</head>
+
+<body>
+
+<div id="ui">Score: 0 | Power: OFF</div>
+<canvas id="game"></canvas>
+
+<div class="controls">
+  <button id="left">⬅️</button>
+  <button id="jump">⬆️</button>
+  <button id="right">➡️</button>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+function resize(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.onresize = resize;
+
+let gravity = 0.6;
+
+class Player {
+  constructor(){
+    this.x = 100;
+    this.y = 200;
+    this.w = 40;
+    this.h = 40;
+    this.dx = 0;
+    this.dy = 0;
+    this.speed = 6;
+    this.jumpPower = -13;
+    this.power = false;
+    this.onGround = false;
+  }
+
+  update(){
+    this.dy += gravity;
+
+    this.x += this.dx;
+    this.y += this.dy;
+
+    // ground
+    if(this.y + this.h > canvas.height-60){
+      this.y = canvas.height-60-this.h;
+      this.dy = 0;
+      this.onGround = true;
+    }
+
+    // boundary
+    if(this.x < 0) this.x = 0;
+    if(this.x > canvas.width-this.w) this.x = canvas.width-this.w;
+  }
+
+  jump(){
+    if(this.onGround){
+      this.dy = this.power ? -18 : this.jumpPower;
+      this.onGround = false;
+    }
+  }
+
+  draw(){
+    ctx.fillStyle = this.power ? "orange" : "red";
+    ctx.fillRect(this.x,this.y,this.w,this.h);
+  }
+}
+
+class Coin {
+  constructor(x,y){
+    this.x = x;
+    this.y = y;
+    this.r = 10;
+  }
+
+  draw(){
+    ctx.fillStyle="gold";
+    ctx.beginPath();
+    ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+    ctx.fill();
+  }
+}
+
+class Enemy {
+  constructor(x,y){
+    this.x = x;
+    this.y = y;
+    this.w = 40;
+    this.h = 40;
+    this.dir = 2;
+  }
+
+  update(){
+    this.x += this.dir;
+    if(this.x < 0 || this.x > canvas.width-40){
+      this.dir *= -1;
+    }
+  }
+
+  draw(){
+    ctx.fillStyle="black";
+    ctx.fillRect(this.x,this.y,this.w,this.h);
+  }
+}
+
+class Power {
+  constructor(x,y){
+    this.x = x;
+    this.y = y;
+    this.size = 20;
+  }
+
+  draw(){
+    ctx.fillStyle="blue";
+    ctx.fillRect(this.x,this.y,this.size,this.size);
+  }
+}
+
+let player = new Player();
+let coins = [new Coin(300,300), new Coin(600,250)];
+let enemies = [new Enemy(500, canvas.height-100)];
+let power = new Power(400,200);
+
+let score = 0;
+
+function collide(a,b){
+  return a.x < b.x + (b.w||b.size) &&
+         a.x + a.w > b.x &&
+         a.y < b.y + (b.h||b.size) &&
+         a.y + a.h > b.y;
+}
+
+let keys = {};
+
+// keyboard
+document.addEventListener("keydown",e=>keys[e.key]=true);
+document.addEventListener("keyup",e=>keys[e.key]=false);
+
+// mobile touch
+document.getElementById("left").ontouchstart = ()=>player.dx=-player.speed;
+document.getElementById("left").ontouchend = ()=>player.dx=0;
+
+document.getElementById("right").ontouchstart = ()=>player.dx=player.speed;
+document.getElementById("right").ontouchend = ()=>player.dx=0;
+
+document.getElementById("jump").ontouchstart = ()=>player.jump();
+
+function update(){
+  // keyboard
+  if(keys["ArrowLeft"]) player.dx = -player.speed;
+  else if(keys["ArrowRight"]) player.dx = player.speed;
+  else player.dx = 0;
+
+  player.update();
+
+  // coins
+  coins = coins.filter(c=>{
+    if(collide(player,c)){
+      score += 10;
+      return false;
+    }
+    return true;
+  });
+
+  // enemy hit
+  enemies.forEach(e=>{
+    e.update();
+    if(collide(player,e)){
+      alert("Game Over");
+      location.reload();
+    }
+  });
+
+  // power
+  if(power && collide(player,power)){
+    player.power = true;
+    setTimeout(()=>player.power=false,5000);
+    power = null;
+  }
+
+  document.getElementById("ui").innerText =
+    "Score: "+score+" | Power: "+(player.power?"ON":"OFF");
+}
+
+function draw(){
+  // sky gradient
+  let g = ctx.createLinearGradient(0,0,0,canvas.height);
+  g.addColorStop(0,"#4facfe");
+  g.addColorStop(1,"#00f2fe");
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // ground
+  ctx.fillStyle="green";
+  ctx.fillRect(0,canvas.height-60,canvas.width,60);
+
+  coins.forEach(c=>c.draw());
+  enemies.forEach(e=>e.draw());
+  if(power) power.draw();
+
+  player.draw();
+}
+
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+
+</body>
+  </html>
